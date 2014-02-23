@@ -196,3 +196,11 @@
 (: generate-new-eme? ( -> Boolean))
 (define (generate-new-eme?)
   (> (random) .333))
+
+; TODO: use odds-on to refactor perplex 
+;Refactor with a "might" HOF, takes a two functions, and a probability, 
+;returns a function which calls the first function with probability, 
+;calls the second function with 1/probability
+(define (odds-on choice alternate odds)
+  (cond [(> (random) odds) choice]
+        [else alternate]))
