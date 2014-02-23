@@ -138,13 +138,13 @@
 ;randomly decides if a list (i.e. Production, list of Production, etc. is to be considered complete, given a probability
 ;thus, the caller may generate a decay function s.t. the likelihood of the production's 
 ;being extended is diminished with each successive call
-;this function thus puts of the determination of the range of variability until the last moment
+;this function is meant to put off the determination of the range of variability until the last moment
 (: done? (All (T) (Listof T) Real -> Boolean))
 (define (done? production probability)
   (cond [(null? production) #f]
         [else  (< (random) probability)]))
 
-;the character set provided by the IBM Selectric II typewriter
+;the character set [here: provided by the IBM Selectric II typewriter]
 (define SELECTRIC-CHARS (set "q" "w" "e" "r" "t" "y" "u" "i" "o" "p" "a" "s" "d" "f" "g" "h" "j" "k" "l" "z" "x" "c" "v" "b" "n" "m" ))
 
 ;utility to find the productions for the given EmeType
