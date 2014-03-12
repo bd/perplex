@@ -14,8 +14,8 @@
 (define-type Production (Listof EmeType))
 ;The whole kitten kaboodle, grammatically speaking--our generated language's grammar
 ;constructed as a list of mappings from a type to valid productions 
-;the order of the list provides implicit hierarchy, s.t. (car Grammar)
-;is composed entirely from the types defined in (cdr Grammar)
+;the order of the list provides implicit hierarchy, s.t. (first Grammar)
+;is composed entirely from the types defined in (rest Grammar)
 (define-type Grammar (Listof SubGrammar))
 ;a single level of a grammar
 (define-type SubGrammar (HashTable EmeType  (Listof Production)))
@@ -31,13 +31,13 @@
                   (λ: ([production : Production]
                        [grammar : Grammar])                      
                     (cond [(null? production) ""]
-                          [(Atom? (car production)) (car production)]
-                          [(lookup-in-lexicon? lexicon (car production)) (string-append 
-                                                                                 (select-random (lookup-in-lexicon lexicon (car production))) 
-                                                                                 (eval (cdr production) grammar))]
-                          [else (string-append (eval (select-random (lookup-productions grammar (car production)))
+                          [(Atom? (first production)) (first production)]
+                          [(lookup-in-lexicon? lexicon (first production)) (string-append 
+                                                                                 (select-random (lookup-in-lexicon lexicon (first production))) 
+                                                                                 (eval (rest production) grammar))]
+                          [else (string-append (eval (select-random (lookup-productions grammar (first production)))
                                                      grammar )
-                                               (eval (cdr production) grammar))]))])
+                                               (eval (rest production) grammar))]))])
     (eval production grammar)))
 
 
@@ -67,7 +67,7 @@
                         [probability : Real]
                         [decay-rate : Real])
                      (cond [(done? grammar probability) grammar]
-                           [else (build (cons (extend-grammar (hash-keys (car grammar))) grammar)
+                           [else (build (cons (extend-grammar (hash-keys (first grammar))) grammar)
                                         (+ probability decay-rate)
                                         decay-rate)]))])
     (build (list base-grammar) GRAMMAR-INITIAL-PROBABILITY GRAMMAR-DECAY-RATE)))
@@ -81,8 +81,8 @@
             [assign-atoms : ((Listof EmeType) (Listof Atom) SubGrammar -> SubGrammar)
                           (λ (types atoms base-grammar)
                             (cond [(null? atoms) base-grammar]
-                                  ;TODO | allow a few atoms to appear as valid productions of more than one base type
-                                  [else (assign-atoms types (cdr atoms) (update base-grammar (select-random types) (list (car atoms))))]))])
+                                  ;TODO | allow a few atoms to appear as valid productions of more than one base type, i.e. "sometimes y"
+                                  [else (assign-atoms types (rest atoms) (update base-grammar (select-random types) (list (first atoms))))]))])
     (assign-atoms types  atoms (make-immutable-hash '()))))
 
 ;arbitrarily creates productions from the typeset argument and 
@@ -96,8 +96,8 @@
                                       [grammar : SubGrammar])
                                    (cond [(null? types) grammar]
                                          [else (compose-productions 
-                                                (cdr types) 
-                                                (hash-set grammar (car types) (random-production-set composing-types)))]))])
+                                                (rest types) 
+                                                (hash-set grammar (first types) (random-production-set composing-types)))]))])
     (compose-productions new-types (make-immutable-hash '()))))
   
 (define PRODUCTION-PROBABILITY .005)
@@ -138,13 +138,13 @@
 ;randomly decides if a list (i.e. Production, list of Production, etc. is to be considered complete, given a probability
 ;thus, the caller may generate a decay function s.t. the likelihood of the production's 
 ;being extended is diminished with each successive call
-;this function thus puts of the determination of the range of variability until the last moment
+;this function is meant to put off the determination of the range of variability until the last moment
 (: done? (All (T) (Listof T) Real -> Boolean))
 (define (done? production probability)
   (cond [(null? production) #f]
         [else  (< (random) probability)]))
 
-;the character set provided by the IBM Selectric II typewriter
+;the character set [here: provided by the IBM Selectric II typewriter]
 (define SELECTRIC-CHARS (set "q" "w" "e" "r" "t" "y" "u" "i" "o" "p" "a" "s" "d" "f" "g" "h" "j" "k" "l" "z" "x" "c" "v" "b" "n" "m" ))
 
 ;utility to find the productions for the given EmeType
@@ -152,8 +152,8 @@
 (define (lookup-productions grammar type)
   (cond [(Atom? type) (error "Cannot use Atom as Key to SubGrammar")] 
         [(null? grammar) (error (string-append "no such type exists in grammar: " (symbol->string type)))]
-        [(hash-has-key? (car grammar) type) (hash-ref (car grammar) type)]
-        [else (lookup-productions (cdr grammar) type)]))
+        [(hash-has-key? (first grammar) type) (hash-ref (first grammar) type)]
+        [else (lookup-productions (rest grammar) type)]))
 
 ;utility function to simplify adding values to a data structure that will be  used frequently throughout
 (: update  (All (A B) (HashTable A (Listof B)) A B -> (HashTable A (Listof B))))
@@ -196,3 +196,11 @@
 (: generate-new-eme? ( -> Boolean))
 (define (generate-new-eme?)
   (> (random) .333))
+
+; TODO: use odds-on to refactor perplex 
+;Refactor with a "might" HOF, takes a two functions, and a probability, 
+;returns a function which calls the first function with probability, 
+;calls the second function with 1/probability
+(define (odds-on choice alternate odds)
+  (cond [(> (random) odds) choice]
+        [else alternate]))

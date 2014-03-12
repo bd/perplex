@@ -44,15 +44,15 @@
 ;rather than evaluate directly, we need to preserve the particulars of an evaluation 
 ;so they can be interred in the lexicon for future use
 ;the flow would be something like build-grammar -> generate production->expand-production->inter-production-evaluations->return text
-(define-type Expansion (Rec (Pairof EmeType (U Exapansion EmeType))))
-(: expand (EmeType Grammar -> Expansion))
-(define (expand type grammar)
-  (letrec: ([expand : (EmeType Grammar -> Expansion)
-                    (λ: ([lhs : EmeType] ;the so-called left-hand side of a production
-                         [grammar : Grammar]
-                         [)
-                        (cond [(Atom? lhs) lhs]
-                              [else (cons lhs (map  (lookup-productions
+;(define-type Expansion (Rec (Pairof EmeType (U Exapansion EmeType))))
+;(: expand (EmeType Grammar -> Expansion))
+;(define (expand type grammar)
+;  (letrec: ([expand : (EmeType Grammar -> Expansion)
+;                    (λ: ([lhs : EmeType] ;the so-called left-hand side of a production
+;                         [grammar : Grammar]
+;                         [)
+;                        (cond [(Atom? lhs) lhs]
+;                              [else (cons lhs (map  (lookup-productions
   
             
 (define GRAMMAR-INITIAL-PROBABILITY .01)
@@ -72,16 +72,20 @@
                                         decay-rate)]))])
     (build (list base-grammar) GRAMMAR-INITIAL-PROBABILITY GRAMMAR-DECAY-RATE)))
 
+(define MIN_CHAR_TYPES 2)
+(define MAX_CHAR_TYPES 3)
+
 ;assigns the character set to arbitrary types, as the starting point for the grammar
 ;this is the foundation of the tower to babble we're constructing
 (: bootstrap ((Setof Atom) -> SubGrammar ))
 (define (bootstrap atomset)
-  (letrec: ([types : (Listof EmeType) (make-random-emetype-list 2 3)]
+  (letrec: ([types : (Listof EmeType) (make-random-emetype-list MIN_CHAR_TYPES MAX_CHAR_TYPES)]
             [atoms : (Listof Atom) (set->list atomset)]
             [assign-atoms : ((Listof EmeType) (Listof Atom) SubGrammar -> SubGrammar)
                           (λ (types atoms base-grammar)
                             (cond [(null? atoms) base-grammar]
                                   ;TODO | allow a few atoms to appear as valid productions of more than one base type, i.e. "sometimes y"
+                                  ;TODO | allow multiple atoms to compose one base type, i.e. "ll"
                                   [else (assign-atoms types (rest atoms) (update base-grammar (select-random types) (list (first atoms))))]))])
     (assign-atoms types  atoms (make-immutable-hash '()))))
 
@@ -201,6 +205,7 @@
 ;Refactor with a "might" HOF, takes a two functions, and a probability, 
 ;returns a function which calls the first function with probability, 
 ;calls the second function with 1/probability
-(define (odds-on choice alternate odds)
+(: odds-on ((Any * -> Any) (Any * -> Any) Real -> (Any * -> Any)))
+(define (odds-on choice alternative odds)
   (cond [(> (random) odds) choice]
-        [else alternate]))
+        [else alternative]))
