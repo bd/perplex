@@ -212,14 +212,17 @@
 
 (define-type Odds (Pairof (Any * -> Any) Real))
 (: odds-that ((Listof Odds) -> (Any * -> Any)))
+;admittedly, I can't prove that this is an accurate algorithm
+;since it's all going to be hand-tuned odds anyhow, initial tests
+;show that it is fit for its purpose
 (define (odds-that odds)
   (letrec: ([total-probability : Real (apply + (map (λ: ([x : Odds]) (cdr x)) odds))]
-           [pick : ((Listof Odds) -> (Any * -> Any))
-                 (λ (odds)
-                   (cond [(empty? odds) (error "No arguments to odds-that")]
-                         [(empty? (rest odds)) (car (first odds))] ; never hit on alternates, this is the event
-                         [(< (random) (cdr (first odds))) (caar odds)] ; hit! return this procedure
-                         [else (pick (rest odds))]))])
+            [pick : ((Listof Odds) -> (Any * -> Any))
+                  (λ (odds)
+                    (cond [(empty? odds) (error "No arguments to odds-that")]
+                          [(empty? (rest odds)) (car (first odds))] ; never hit on alternates, this is the event
+                          [(< (random) (cdr (first odds))) (caar odds)] ; hit! return this procedure
+                          [else (pick (rest odds))]))])
     (if (= 1.0 total-probability)
         (pick (reverse (sort odds (λ: ([one : Odds] [other : Odds]) (> (cdr one) (cdr other))))))
         (error "Odds in argument to odds-that must total 1.0"))))
