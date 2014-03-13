@@ -221,5 +221,5 @@
                          [(< (random) (cdr (first odds))) (caar odds)] ; hit! return this procedure
                          [else (pick (rest odds))]))])
     (if (= 1.0 total-probability)
-        (pick odds)
+        (pick (reverse (sort odds (λ: ([one : Odds] [other : Odds]) (> (cdr one) (cdr other))))))
         (error "Odds in argument to odds-that must total 1.0"))))
