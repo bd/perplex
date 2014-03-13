@@ -33,8 +33,8 @@
                     (cond [(null? production) ""]
                           [(Atom? (first production)) (first production)]
                           [(lookup-in-lexicon? lexicon (first production)) (string-append 
-                                                                                 (select-random (lookup-in-lexicon lexicon (first production))) 
-                                                                                 (eval (rest production) grammar))]
+                                                                            (select-random (lookup-in-lexicon lexicon (first production))) 
+                                                                            (eval (rest production) grammar))]
                           [else (string-append (eval (select-random (lookup-productions grammar (first production)))
                                                      grammar )
                                                (eval (rest production) grammar))]))])
@@ -53,11 +53,11 @@
 ;                         [)
 ;                        (cond [(Atom? lhs) lhs]
 ;                              [else (cons lhs (map  (lookup-productions
-  
-            
+
+
 (define GRAMMAR-INITIAL-PROBABILITY .01)
 (define GRAMMAR-DECAY-RATE .02)
-      
+
 ;constructs a grammar for the language 
 (: build-grammar ((Setof Atom) -> Grammar))
 (define (build-grammar atomset)
@@ -103,7 +103,7 @@
                                                 (rest types) 
                                                 (hash-set grammar (first types) (random-production-set composing-types)))]))])
     (compose-productions new-types (make-immutable-hash '()))))
-  
+
 (define PRODUCTION-PROBABILITY .005)
 (define PRODUCTION-DECAY .03)
 
@@ -120,7 +120,7 @@
                                              (+ probability decay-rate)
                                              decay-rate)]))])
     (set->list (make-productions (set ) PRODUCTION-PROBABILITY PRODUCTION-DECAY))))
-   
+
 (define PRODUCTION-COMPLETION-PROBABILITY .005)
 (define PRODUCTION-COMPLETION-DECAY .02)
 
@@ -174,7 +174,7 @@
 ;utility
 (: lookup-in-lexicon (Lexicon EmeType -> (Listof String)))
 (define (lookup-in-lexicon lexicon type)
-   (hash-ref lexicon type))
+  (hash-ref lexicon type))
 
 ;generates an arbitrary, unique symbol to use as the type name
 (: new-emetype (-> EmeType))
@@ -207,5 +207,19 @@
 ;calls the second function with 1/probability
 (: odds-on ((Any * -> Any) (Any * -> Any) Real -> (Any * -> Any)))
 (define (odds-on choice alternative odds)
-  (cond [(> (random) odds) choice]
+  (cond [(< (random) odds) choice]
         [else alternative]))
+
+(define-type Odds (Pairof (Any * -> Any) Real))
+(: odds-that ((Listof Odds) -> (Any * -> Any)))
+(define (odds-that odds)
+  (letrec: ([total-probability : Real (apply + (map (λ: ([x : Odds]) (cdr x)) odds))]
+           [pick : ((Listof Odds) -> (Any * -> Any))
+                 (λ (odds)
+                   (cond [(empty? odds) (error "No arguments to odds-that")]
+                         [(empty? (rest odds)) (car (first odds))] ; never hit on alternates, this is the event
+                         [(< (random) (cdr (first odds))) (caar odds)] ; hit! return this procedure
+                         [else (pick (rest odds))]))])
+    (if (= 1.0 total-probability)
+        (pick odds)
+        (error "Odds in argument to odds-that must total 1.0"))))
