@@ -19,9 +19,14 @@
 (define-type Grammar (Listof SubGrammar))
 ;a single level of a grammar
 (define-type SubGrammar (HashTable EmeType  (Listof Production)))
-;the container for the specific phonemes, words, phrases, etc. 
+;the container for the specific tokens of given EmeTypes
 ; organized by EmeType
+; i.e. all the words (phrases, phonemes, etc.) in the language
 (define-type Lexicon (HashTable EmeType (Listof String)))  
+
+(: empty-lexicon ( -> Lexicon))
+(define (empty-lexicon)
+  (make-immutable-hash `()))
 
 ;turns a production into text. That is, given a grammatical outline of a unit of language
 ;it non-deterministically generates a text that conforms to the rules presented.
@@ -41,18 +46,54 @@
     (eval production grammar)))
 
 
+
+
 ;rather than evaluate directly, we need to preserve the particulars of an evaluation 
 ;so they can be interred in the lexicon for future use
 ;the flow would be something like build-grammar -> generate production->expand-production->inter-production-evaluations->return text
-;(define-type Expansion (Rec (Pairof EmeType (U Exapansion EmeType))))
-;(: expand (EmeType Grammar -> Expansion))
-;(define (expand type grammar)
-;  (letrec: ([expand : (EmeType Grammar -> Expansion)
-;                    (λ: ([lhs : EmeType] ;the so-called left-hand side of a production
+(define-type Expansion (Pairof String Lexicon))
+;(: expand-production (Production Grammar Lexicon -> Expansion))
+;(define (expand-production production grammar lexicon)
+;  (letrec: ([lookup : (EmeType Lexicon -> String)
+;                    (λ: ([term : EmeType]
+;                         [lexicon : Lexicon])
+;                      (select-random (lookup-in-lexicon lexicon term)))]
+;            [invent : (EmeType Grammar Lexicon -> String)
+;                    (λ: ([term : EmeType]
 ;                         [grammar : Grammar]
-;                         [)
-;                        (cond [(Atom? lhs) lhs]
-;                              [else (cons lhs (map  (lookup-productions
+;                         [lexicon : Lexicon])
+;                      (
+;                         
+
+;(define g (build-grammar SELECTRIC-CHARS))
+;(first (select-random (lookup-productions g (first (hash-keys (last g))))))
+
+(define PROB-NEW-TOKEN .23)
+
+(define-type Expander (EmeType Grammar Lexicon -> Expansion))
+
+(: expand Expander)
+(define (expand type grammar lexicon)
+  ((odds-on new-token old-token PROB-NEW-TOKEN) grammar lexicon))
+
+(: new-token Expander)
+(define (new-token type grammar lexicon)
+  (pass))
+
+(: old-token Expander)
+(define (old-token type grammar lexicon)
+  (let: ([token : String (select-random (lookup-in-lexicon lexicon type))])
+    `(,token . ,lexicon)))
+
+(: isAtomType? (EmeType Grammar -> Boolean))
+(define (isAtomType? type grammar)
+  (let: ([productions : (Listof Production) (lookup-productions grammar type)])
+    (and (not (empty? productions)) (Atom? (first (first productions))))))
+
+(: make-atom-emetype (EmeType Grammar -> Expansion))
+(define (make-atom-emetype type grammar)
+  (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
+    `(,token . ,(update (empty-lexicon) type token))))
 
 
 (define GRAMMAR-INITIAL-PROBABILITY .01)
@@ -137,7 +178,7 @@
                                          (cons (select-random types) production) 
                                          (+  probability decay-rate)
                                          decay-rate)]))])
-    (grammar-rule '() PRODUCTION-COMPLETION-PROBABILITY PRODUCTION-COMPLETION-DECAY))) ;TODO extract decay/probability to constants or dynamic lookup
+    (grammar-rule '() PRODUCTION-COMPLETION-PROBABILITY PRODUCTION-COMPLETION-DECAY))) 
 
 ;randomly decides if a list (i.e. Production, list of Production, etc. is to be considered complete, given a probability
 ;thus, the caller may generate a decay function s.t. the likelihood of the production's 
@@ -212,9 +253,8 @@
 
 (define-type Odds (Pairof (Any * -> Any) Real))
 (: odds-that ((Listof Odds) -> (Any * -> Any)))
-;admittedly, I can't prove that this is an accurate algorithm
-;since it's all going to be hand-tuned odds anyhow, initial tests
-;show that it is fit for its purpose
+;admittedly, I can't prove that this is an accurate algorithm for generating the specified distribution
+;since it's all going to be hand-tuned odds anyhow, initial tests show that it is fit for its purpose
 (define (odds-that odds)
   (letrec: ([total-probability : Real (apply + (map (λ: ([x : Odds]) (cdr x)) odds))]
             [pick : ((Listof Odds) -> (Any * -> Any))
@@ -226,3 +266,7 @@
     (if (= 1.0 total-probability)
         (pick (reverse (sort odds (λ: ([one : Odds] [other : Odds]) (> (cdr one) (cdr other))))))
         (error "Odds in argument to odds-that must total 1.0"))))
+
+(define (pass)
+  (error "NOT YET IMPLEMENTED"))
+
