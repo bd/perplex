@@ -46,30 +46,18 @@
                                                (eval (rest production) grammar))]))])
     (eval production grammar)))
 
-
-
+; debugging-----
+;(define g (build-grammar SELECTRIC-CHARS))
+;(first (select-random (lookup-productions g (first (hash-keys (last g))))))
+;---------------
 
 ;rather than evaluate directly, we need to preserve the particulars of an evaluation 
 ;so they can be interred in the lexicon for future use
 ;the flow would be something like build-grammar -> generate production->expand-production->inter-production-evaluations->return text
+
 (define-type Expansion (Pairof String Lexicon))
-;(: expand-production (Production Grammar Lexicon -> Expansion))
-;(define (expand-production production grammar lexicon)
-;  (letrec: ([lookup : (EmeType Lexicon -> String)
-;                    (λ: ([term : EmeType]
-;                         [lexicon : Lexicon])
-;                      (select-random (lookup-in-lexicon lexicon term)))]
-;            [invent : (EmeType Grammar Lexicon -> String)
-;                    (λ: ([term : EmeType]
-;                         [grammar : Grammar]
-;                         [lexicon : Lexicon])
-;                      (
-;                         
+(define PROB-NEW-TOKEN .23) ; because _that's_ the probability of a new token
 
-;(define g (build-grammar SELECTRIC-CHARS))
-;(first (select-random (lookup-productions g (first (hash-keys (last g))))))
-
-(define PROB-NEW-TOKEN .23)
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
 
@@ -78,20 +66,46 @@
   ((odds-on new-token old-token PROB-NEW-TOKEN) type grammar lexicon))
 
 (: new-token Expander)
+; generates a new token-- a new part of the language is used for the first time
+; a new word is coined, a 
 (define (new-token type grammar lexicon)
-  (pass))
+  (cond [(isAtomType? type grammar) (make-atom-emetype type grammar)]
+        [else (collapse (expand-all (random-rhs-of type grammar) grammar lexicon))]))
+
+(: expand-all (Production Grammar Lexicon -> (Listof Expansion)))
+(define (expand-all types grammar lexicon)
+  (map (λ: ((t : EmeType)) (expand t grammar lexicon)) types))
+
+(: random-rhs-of (EmeType Grammar -> Production))
+; pull a random production out of the grammar
+(define (random-rhs-of type grammar)
+  (select-random (lookup-productions grammar type)))
+
+(: collapse ((Listof Expansion) -> Expansion))
+; flatten a list of expansions into a single expansion representing the whole thing--
+(define (collapse expansions)
+  (foldl (λ: ([e : Expansion]
+              [completed : Expansion])`(,(string-append (car e) (car completed)) . ,(merge-lexica (cdr e) (cdr completed))))
+         `(,"" . ,(empty-lexicon))
+         expansions))
+
+
+
 
 (: old-token Expander)
+; a pre-existing token is employed. 
 (define (old-token type grammar lexicon)
   (let: ([token : String (select-random (lookup-in-lexicon lexicon type))])
     `(,token . ,lexicon)))
 
 (: isAtomType? (EmeType Grammar -> Boolean))
+; true if the emetype is indivisible within a given grammar.
 (define (isAtomType? type grammar)
   (let: ([productions : (Listof Production) (lookup-productions grammar type)])
     (and (not (empty? productions)) (Atom? (first (first productions))))))
 
 (: make-atom-emetype (EmeType Grammar -> Expansion))
+; create an expansion with a random atomic token
 (define (make-atom-emetype type grammar)
   (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
     `(,token . ,(update (empty-lexicon) type token))))
@@ -100,18 +114,20 @@
 (: merge-lexica (Lexicon Lexicon -> Lexicon))
 (define (merge-lexica a b)
   (letrec: ([merge-list : ((Listof String) (Listof String) -> (Listof String))
-                     (λ: ([lst-a : (Listof String)]
-                          [lst-b : (Listof String)])
-                       (set->list (set-union (list->set lst-a) (list->set lst-b))))]
-         [a-keys : (Listof EmeType) (hash-keys a)]
-         [b-keys : (Listof EmeType) (hash-keys b)]
-         [default : (-> '()) (λ () '())]) ;if we don't find the key, just return an empty list
+                        (λ: ([lst-a : (Listof String)]
+                             [lst-b : (Listof String)])
+                          (set->list (set-union (list->set lst-a) (list->set lst-b))))]
+            [a-keys : (Listof EmeType) (hash-keys a)]
+            [b-keys : (Listof EmeType) (hash-keys b)]
+            [default : (-> '()) (λ () '())]) ;if we don't find the key, just return an empty list
     (cond [(empty? a-keys) b]
           [(empty? b-keys) a]
           [else (merge-lexica (hash-set a (first b-keys) (merge-list (hash-ref a (first b-keys) default)
                                                                      (hash-ref b (first b-keys)))) ;should always hit, I want an error if it doesn't
                               (hash-remove b (first b-keys)))])))
-       
+
+
+
 
 (define GRAMMAR-INITIAL-PROBABILITY .01)
 (define GRAMMAR-DECAY-RATE .02)
