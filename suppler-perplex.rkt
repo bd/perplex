@@ -1,5 +1,6 @@
 #lang typed/racket
 (require math/base)
+(require racket/set)
 
 ;the smallest unit of language, here, represented as a 1 character string
 (define-type Atom String)
@@ -72,9 +73,9 @@
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
 
-(: expand Expander)
-(define (expand type grammar lexicon)
-  ((odds-on new-token old-token PROB-NEW-TOKEN) grammar lexicon))
+;(: expand Expander)
+;(define (expand type grammar lexicon)
+;  ((odds-on new-token old-token PROB-NEW-TOKEN) grammar lexicon))
 
 (: new-token Expander)
 (define (new-token type grammar lexicon)
@@ -95,6 +96,23 @@
   (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
     `(,token . ,(update (empty-lexicon) type token))))
 
+; utility to combine two lexica into a single master lexicon
+(: merge-lexica (Lexicon Lexicon -> Lexicon))
+(define (merge-lexica a b)
+  (letrec: ([merge-list : ((Listof String) (Listof String) -> (Listof String))
+                     (λ: ([lst-a : (Listof String)]
+                          [lst-b : (Listof String)])
+                       (set->list (set-union (list->set lst-a) (list->set lst-b))))]
+         [a-keys : (Listof EmeType) (hash-keys a)]
+         [b-keys : (Listof EmeType) (hash-keys b)]
+         [not-found : (-> '()) (λ () '())]) ;if we don't find the key, just return an empty list
+    ;logic is to move each list of strings into lex a, and whittle down lex b
+    (cond [(empty? a-keys) b]
+          [(empty? b-keys) a]
+          [else (merge-lexica (hash-set a (first b-keys) (merge-list (hash-ref a (first b-keys) not-found)
+                                                                     (hash-ref b (first b-keys)))) ;should always hit, I want an error if it doesn't
+                              (hash-remove b (first b-keys)))])))
+       
 
 (define GRAMMAR-INITIAL-PROBABILITY .01)
 (define GRAMMAR-DECAY-RATE .02)
@@ -245,7 +263,7 @@
 ; TODO: use odds-on to refactor perplex 
 ;Refactor with a "might" HOF, takes a two functions, and a probability, 
 ;returns a function which calls the first function with probability, 
-;calls the second function with 1/probability
+;calls the second function with 1 - probability
 (: odds-on ((Any * -> Any) (Any * -> Any) Real -> (Any * -> Any)))
 (define (odds-on choice alternative odds)
   (cond [(< (random) odds) choice]
