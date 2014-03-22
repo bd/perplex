@@ -73,9 +73,9 @@
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
 
-;(: expand Expander)
-;(define (expand type grammar lexicon)
-;  ((odds-on new-token old-token PROB-NEW-TOKEN) grammar lexicon))
+(: expand Expander)
+(define (expand type grammar lexicon)
+  ((odds-on new-token old-token PROB-NEW-TOKEN) type grammar lexicon))
 
 (: new-token Expander)
 (define (new-token type grammar lexicon)
@@ -263,7 +263,7 @@
 ;Refactor with a "might" HOF, takes a two functions, and a probability, 
 ;returns a function which calls the first function with probability, 
 ;calls the second function with 1 - probability
-(: odds-on ((Any * -> Any) (Any * -> Any) Real -> (Any * -> Any)))
+(: odds-on (All (X Y) (X Y Real -> (U X Y))))
 (define (odds-on choice alternative odds)
   (cond [(< (random) odds) choice]
         [else alternative]))
