@@ -84,19 +84,19 @@
 (: collapse ((Listof Expansion) -> Expansion))
 ; flatten a list of expansions into a single expansion representing the whole thing--
 (define (collapse expansions)
-  (foldl (λ: ([e : Expansion]
-              [completed : Expansion])`(,(string-append (car e) (car completed)) . ,(merge-lexica (cdr e) (cdr completed))))
-         `(,"" . ,(empty-lexicon))
-         expansions))
-
-
-
-
+  (let: ([token : String (foldl (λ: ([e : Expansion] [working : String]) (string-append working (car e))) "" expansions)]
+         [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (cdr e))) (empty-lexicon) expansions)])
+    (make-expansion token lexicon)))
+         
+(: make-expansion (String Lexicon -> Expansion))
+(define (make-expansion token lex)
+  `(,token . ,lex))
+      
 (: old-token Expander)
 ; a pre-existing token is employed. 
 (define (old-token type grammar lexicon)
   (let: ([token : String (select-random (lookup-in-lexicon lexicon type))])
-    `(,token . ,lexicon)))
+    (make-expansion token lexicon)))
 
 (: isAtomType? (EmeType Grammar -> Boolean))
 ; true if the emetype is indivisible within a given grammar.
