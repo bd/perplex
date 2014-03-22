@@ -105,11 +105,10 @@
                        (set->list (set-union (list->set lst-a) (list->set lst-b))))]
          [a-keys : (Listof EmeType) (hash-keys a)]
          [b-keys : (Listof EmeType) (hash-keys b)]
-         [not-found : (-> '()) (λ () '())]) ;if we don't find the key, just return an empty list
-    ;logic is to move each list of strings into lex a, and whittle down lex b
+         [default : (-> '()) (λ () '())]) ;if we don't find the key, just return an empty list
     (cond [(empty? a-keys) b]
           [(empty? b-keys) a]
-          [else (merge-lexica (hash-set a (first b-keys) (merge-list (hash-ref a (first b-keys) not-found)
+          [else (merge-lexica (hash-set a (first b-keys) (merge-list (hash-ref a (first b-keys) default)
                                                                      (hash-ref b (first b-keys)))) ;should always hit, I want an error if it doesn't
                               (hash-remove b (first b-keys)))])))
        
