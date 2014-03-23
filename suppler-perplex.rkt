@@ -108,7 +108,7 @@
 ; create an expansion with a random atomic token
 (define (make-atom-emetype type grammar)
   (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
-    `(,token . ,(update (empty-lexicon) type token))))
+    (make-expansion token (update (empty-lexicon) type token))))
 
 ; utility to combine two lexica into a single master lexicon
 (: merge-lexica (Lexicon Lexicon -> Lexicon))
