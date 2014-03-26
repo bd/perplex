@@ -25,54 +25,49 @@
 ; i.e. all the words (phrases, phonemes, etc.) in the language
 (define-type Lexicon (HashTable EmeType (Listof String)))  
 
+(: top-lhs-of (Grammar -> (Listof EmeType)))
+(define (top-lhs-of grammar)
+  (hash-keys (first grammar)))
+
+(: random-top-lhs-of (Grammar -> EmeType))
+(define (random-top-lhs-of grammar)
+  (select-random (top-lhs-of grammar)))
+
 (: empty-lexicon ( -> Lexicon))
 (define (empty-lexicon)
   (make-immutable-hash `()))
-
-;turns a production into text. That is, given a grammatical outline of a unit of language
-;it non-deterministically generates a text that conforms to the rules presented.
-(: evaluate (Production Grammar Lexicon -> String))
-(define (evaluate production grammar lexicon)
-  (letrec: ([eval : (Production Grammar -> String)
-                  (λ: ([production : Production]
-                       [grammar : Grammar])                      
-                    (cond [(null? production) ""]
-                          [(Atom? (first production)) (first production)]
-                          [(lookup-in-lexicon? lexicon (first production)) (string-append 
-                                                                            (select-random (lookup-in-lexicon lexicon (first production))) 
-                                                                            (eval (rest production) grammar))]
-                          [else (string-append (eval (select-random (lookup-productions grammar (first production)))
-                                                     grammar )
-                                               (eval (rest production) grammar))]))])
-    (eval production grammar)))
-
-; debugging-----
-;(define g (build-grammar SELECTRIC-CHARS))
-;(first (select-random (lookup-productions g (first (hash-keys (last g))))))
-;---------------
 
 ;rather than evaluate directly, we need to preserve the particulars of an evaluation 
 ;so they can be interred in the lexicon for future use
 ;the flow would be something like build-grammar -> generate production->expand-production->inter-production-evaluations->return text
 
 (define-type Expansion (Pairof String Lexicon))
-(define PROB-NEW-TOKEN .23) ; because _that's_ the probability of a new token
-
+(define PROB-NEW-TOKEN .10) ; because _that's_ the probability of a new token
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
 
 (: expand Expander)
+; expands a type into a string and lexicon pair (Expansion)
+; this is a non-deterministic function
 (define (expand type grammar lexicon)
   ((odds-on new-token old-token PROB-NEW-TOKEN) type grammar lexicon))
 
 (: new-token Expander)
 ; generates a new token-- a new part of the language is used for the first time
-; a new word is coined, a 
+; a new word is coined, a phoneme uttered
 (define (new-token type grammar lexicon)
   (cond [(isAtomType? type grammar) (make-atom-emetype type grammar)]
-        [else (collapse (expand-all (random-rhs-of type grammar) grammar lexicon))]))
+        [else (let ([exp (collapse (expand-all (random-rhs-of type grammar) grammar lexicon))])
+                (make-expansion (token-of exp) (update (lexicon-of exp) type (token-of exp))))]))
+
+(: make-atom-emetype (EmeType Grammar -> Expansion))
+; create an expansion with a random atomic token
+(define (make-atom-emetype type grammar)
+  (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
+    (make-expansion token (update (empty-lexicon) type token))))
 
 (: expand-all (Production Grammar Lexicon -> (Listof Expansion)))
+;expands each type in turn 
 (define (expand-all types grammar lexicon)
   (map (λ: ((t : EmeType)) (expand t grammar lexicon)) types))
 
@@ -84,8 +79,8 @@
 (: collapse ((Listof Expansion) -> Expansion))
 ; flatten a list of expansions into a single expansion representing the whole thing--
 (define (collapse expansions)
-  (let: ([token : String (foldl (λ: ([e : Expansion] [working : String]) (string-append working (car e))) "" expansions)]
-         [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (cdr e))) (empty-lexicon) expansions)])
+  (letrec: ([token : String (foldl (λ: ([e : Expansion] [working : String]) (string-append working (token-of e))) "" expansions)]
+         [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
     (make-expansion token lexicon)))
          
 (: make-expansion (String Lexicon -> Expansion))
@@ -95,8 +90,16 @@
 (: old-token Expander)
 ; a pre-existing token is employed. 
 (define (old-token type grammar lexicon)
-  (let: ([token : String (select-random (lookup-in-lexicon lexicon type))])
-    (make-expansion token lexicon)))
+  (cond [(inLexicon? type lexicon)(make-expansion (select-random (lookup-in-lexicon lexicon type)) lexicon)]
+        [else (new-token type grammar lexicon)]))
+
+(: inLexicon? (EmeType Lexicon -> Boolean))
+(define (inLexicon? type lexicon)
+  (hash-has-key? lexicon type))
+
+;(define g (build-grammar SELECTRIC-CHARS))
+;(define t (random-top-lhs-of g))
+;(expand t g (empty-lexicon))
 
 (: isAtomType? (EmeType Grammar -> Boolean))
 ; true if the emetype is indivisible within a given grammar.
@@ -104,11 +107,6 @@
   (let: ([productions : (Listof Production) (lookup-productions grammar type)])
     (and (not (empty? productions)) (Atom? (first (first productions))))))
 
-(: make-atom-emetype (EmeType Grammar -> Expansion))
-; create an expansion with a random atomic token
-(define (make-atom-emetype type grammar)
-  (let: ([token : String (cast (first (select-random (lookup-productions grammar type))) String)])
-    (make-expansion token (update (empty-lexicon) type token))))
 
 ; utility to combine two lexica into a single master lexicon
 (: merge-lexica (Lexicon Lexicon -> Lexicon))
@@ -125,8 +123,21 @@
           [else (merge-lexica (hash-set a (first b-keys) (merge-list (hash-ref a (first b-keys) default)
                                                                      (hash-ref b (first b-keys)))) ;should always hit, I want an error if it doesn't
                               (hash-remove b (first b-keys)))])))
+;; ---------- example of merge-lexica: -----------
+;; > (define t (new-emetype)
+;; > (define tokens-a (list "alpha" "beta"))
+;; > (define tokens-b (list "beta" "gamma" "delta))
+;; > (merge-lexica (make-immutable-hash (list `(,t . ,tokens-a))) (make-immutable-hash (list `(,t . ,tokens-b))))
+;; - : Lexicon
+;; '#hash((EmeType60344 . ("beta" "alpha" "delta" "gamma")))
 
+(: token-of (Expansion -> String))
+(define (token-of e)
+  (car e))
 
+(: lexicon-of (Expansion -> Lexicon))
+(define (lexicon-of e)
+  (cdr e))
 
 
 (define GRAMMAR-INITIAL-PROBABILITY .01)
@@ -302,4 +313,22 @@
 
 (define (pass)
   (error "NOT YET IMPLEMENTED"))
+
+
+;turns a production into text. That is, given a grammatical outline of a unit of language
+;it non-deterministically generates a text that conforms to the rules presented.
+(: evaluate (Production Grammar Lexicon -> String))
+(define (evaluate production grammar lexicon)
+  (letrec: ([eval : (Production Grammar -> String)
+                  (λ: ([production : Production]
+                       [grammar : Grammar])                      
+                    (cond [(null? production) ""]
+                          [(Atom? (first production)) (first production)]
+                          [(lookup-in-lexicon? lexicon (first production)) (string-append 
+                                                                            (select-random (lookup-in-lexicon lexicon (first production))) 
+                                                                            (eval (rest production) grammar))]
+                          [else (string-append (eval (select-random (lookup-productions grammar (first production)))
+                                                     grammar )
+                                               (eval (rest production) grammar))]))])
+    (eval production grammar)))
 
