@@ -378,9 +378,11 @@
             [punctuate-lhs : ((Listof EmeType) SubGrammar EmeType -> SubGrammar)
                             (λ (types sg punc-type)
                               (cond [(empty? types) sg]
-                                    [else (punctuate-lhs (rest types) (hash-set sg (first types) (map (λ: ([prod : Production]) (cond [(not (string? (first prod)))`(,@prod ,punc-type)]
+                                    [else (punctuate-lhs (rest types) 
+                                                         (hash-set sg (first types) (map (λ: ([prod : Production]) (cond [(not (string? (first prod)))`(,@prod ,punc-type)]
                                                                                                                                       [else prod]))
-                                                                                                     (hash-ref sg (first types)))) punc-type)]))])
+                                                                                                     (hash-ref sg (first types))))
+                                                         punc-type)]))])
             (punctuate-lhs keys subgrammar punctuation-type)))
 
 (: lengthen-grammar (Grammar -> Grammar))
