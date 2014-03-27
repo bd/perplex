@@ -189,9 +189,9 @@
                              `(,(new-emetype) . (("i") ("u") ("o") ("e") ("y") ("a"))))) SubGrammar))
 
 
+(: extend-grammar ((Listof EmeType) -> SubGrammar))
 ;arbitrarily creates productions from the typeset argument and 
 ;and assigns  them to a randomly generated list of new higher-order EmeTypes
-(: extend-grammar ((Listof EmeType) -> SubGrammar))
 (define (extend-grammar typeset)
   (letrec: ([new-types : (Listof EmeType) (make-random-emetype-list 6 60)]
             [composing-types : (Listof EmeType) typeset]
@@ -207,8 +207,9 @@
 (define PRODUCTION-PROBABILITY .01)
 (define PRODUCTION-DECAY .03)
 
-;constructs a set of Productions (though returned as a list type for convenience)
+
 (: random-production-set ((Listof EmeType) -> (Listof Production)))
+;constructs a set of Productions (though returned as a list type for convenience)
 (define (random-production-set composing-types)
   (letrec: ([make-productions : ((Setof Production) Real Real -> (Setof Production))
                               (λ: ([productions : (Setof Production)]
@@ -330,7 +331,72 @@
   (error "NOT YET IMPLEMENTED"))
 
 
-(define G (build-grammar SELECTRIC-CHARS))
+
+
+(define NONE '(""))
+(define SPACE '(" "))
+(define INTRA-SENTENCE '(" " "," "-"))
+(define INTER-SENTENCE '("." "!" ";" ":" "..." "?"))
+(: append-newline (String -> String))
+(define (append-newline x) (string-append x "\n"))
+(define WITH-NEWLINE (map append-newline INTER-SENTENCE))
+(define DOUBLE-NEWLINE (map append-newline WITH-NEWLINE))
+(define ALL-PUNCTUATION `(,NONE ,NONE ,SPACE ,INTRA-SENTENCE ,INTER-SENTENCE ,WITH-NEWLINE ,DOUBLE-NEWLINE))
+
+(define-type PunctuationLayer (Pairof EmeType (Listof (Listof String))))
+
+(: make-punctuation-layer ((Listof String) -> PunctuationLayer))
+(define (make-punctuation-layer marks)
+  `(,(new-emetype) . ,(map (λ: ([x : String]) (list x)) marks)))
+
+
+;TODO: refactor punctuation phase into grammar build phase for clarity
+(: punctuate ((Listof PunctuationLayer) Grammar -> Grammar))
+; adds punctuate to an existing grammar
+; | assumes a reverse-order (smallest units first) grammar
+; | assumes a normal-order (smallest units first) list of PunctuationLayers
+; | then applies the punctuation layer to the grammer, s.t. the smallest units 
+;   of punctuation applied first
+(define (punctuate punctuation grammar)
+  (cond [(> (length punctuation) (length grammar)) (punctuate punctuation (lengthen-grammar grammar))]
+        [(< (length punctuation) (length grammar)) (punctuate (lengthen-punctuation punctuation) grammar)]
+        [else (foldl (λ: ([marks : PunctuationLayer] [subgrammar : SubGrammar] [acc : Grammar]) `(,(punctuate-subgrammar marks subgrammar) ,@acc)) 
+                     '()
+                     punctuation
+                     `(,(add-punctuation-types punctuation (first grammar)) ,@(rest grammar)))]))
+
+(: add-punctuation-types ((Listof PunctuationLayer) SubGrammar -> SubGrammar))
+(define (add-punctuation-types punctuation subgrammar)
+  (make-immutable-hash `(,@punctuation ,@(hash->list subgrammar))))
+            
+
+(: punctuate-subgrammar (PunctuationLayer SubGrammar -> SubGrammar))
+; appends the EmeType of marks to the end of each production in subgrammar
+(define (punctuate-subgrammar marks subgrammar)
+  (letrec: ([keys : (Listof EmeType) (hash-keys subgrammar)]
+            [punctuation-type : EmeType (car marks)]
+            [punctuate-lhs : ((Listof EmeType) SubGrammar EmeType -> SubGrammar)
+                            (λ (types sg punc-type)
+                              (cond [(empty? types) sg]
+                                    [else (punctuate-lhs (rest types) (hash-set sg (first types) (map (λ: ([prod : Production]) (cond [(not (string? (first prod)))`(,@prod ,punc-type)]
+                                                                                                                                      [else prod]))
+                                                                                                     (hash-ref sg (first types)))) punc-type)]))])
+            (punctuate-lhs keys subgrammar punctuation-type)))
+
+(: lengthen-grammar (Grammar -> Grammar))
+; extends a grammar by adding a layer of grammar above the top
+(define (lengthen-grammar grammar)
+  `(,(extend-grammar (hash-keys (first grammar))) ,@grammar))
+
+(: lengthen-punctuation ((Listof PunctuationLayer) -> (Listof PunctuationLayer)))
+; used when there are not enough punctuation layers to punctuate a grammar
+; simply extend with double-newline punctuation layers.
+; TODO: consider a probabalistic function to alternately add NONE layers...
+(define (lengthen-punctuation punctuation)
+  `(,@punctuation ,(make-punctuation-layer DOUBLE-NEWLINE)))
+
+(define ALL-PUNCTUATION-LAYERS (map (λ: ([x : (Listof String)]) (make-punctuation-layer x)) ALL-PUNCTUATION))
+(define G (reverse (punctuate ALL-PUNCTUATION-LAYERS (reverse (build-grammar SELECTRIC-CHARS)))))
 
 
 ;NOT USED--
