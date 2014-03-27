@@ -140,13 +140,13 @@
   (cdr e))
 
 
-(define GRAMMAR-INITIAL-PROBABILITY .01)
+(define GRAMMAR-INITIAL-PROBABILITY .05)
 (define GRAMMAR-DECAY-RATE .02)
 
 ;constructs a grammar for the language 
 (: build-grammar ((Setof Atom) -> Grammar))
 (define (build-grammar atomset)
-  (letrec: ([base-grammar : SubGrammar (bootstrap atomset)]
+  (letrec: ([base-grammar : SubGrammar (root-grammar) ]
             [build : (Grammar Real Real -> Grammar)
                    (λ: ([grammar : Grammar]
                         [probability : Real]
@@ -162,17 +162,32 @@
 
 ;assigns the character set to arbitrary types, as the starting point for the grammar
 ;this is the foundation of the tower to babble we're constructing
-(: bootstrap ((Setof Atom) -> SubGrammar ))
-(define (bootstrap atomset)
-  (letrec: ([types : (Listof EmeType) (make-random-emetype-list MIN_CHAR_TYPES MAX_CHAR_TYPES)]
-            [atoms : (Listof Atom) (set->list atomset)]
-            [assign-atoms : ((Listof EmeType) (Listof Atom) SubGrammar -> SubGrammar)
-                          (λ (types atoms base-grammar)
-                            (cond [(null? atoms) base-grammar]
-                                  ;TODO | allow a few atoms to appear as valid productions of more than one base type, i.e. "sometimes y"
-                                  ;TODO | allow multiple atoms to compose one base type, i.e. "ll"
-                                  [else (assign-atoms types (rest atoms) (update base-grammar (select-random types) (list (first atoms))))]))])
-    (assign-atoms types  atoms (make-immutable-hash '()))))
+;(: bootstrap ((Setof Atom) -> SubGrammar ))
+;(define (bootstrap atomset)
+;  (letrec: ([types : (Listof EmeType) (make-random-emetype-list MIN_CHAR_TYPES MAX_CHAR_TYPES)]
+;            [atoms : (Listof Atom) (set->list atomset)]
+;            [assign-atoms : ((Listof EmeType) (Listof Atom) SubGrammar -> SubGrammar)
+;                          (λ (types atoms base-grammar)
+;                            (cond [(null? atoms) base-grammar]
+;                                  ;TODO | allow a few atoms to appear as valid productions of more than one base type, i.e. "sometimes y"
+;                                  ;TODO | allow multiple atoms to compose one base type, i.e. "ll"
+;                                  [else (assign-atoms types (rest atoms) (update base-grammar (select-random types) (list (first atoms))))]))])
+;    (assign-atoms types  atoms (make-immutable-hash '()))))
+
+
+;introducing more structure for aesthetic purposes
+; essentially, replacing bootstrap, above, is int- 
+; ended to make more "readable" gibberish. the 
+; consonant/vowel divide simply makes the patterns
+; a little more accessible on first glance.
+;   | create a type for vowels, 
+;   | a type for consonants, 
+;   | and a type for special/double chars
+(: root-grammar (-> SubGrammar))
+(define (root-grammar)
+  (cast (make-immutable-hash (list `(,(new-emetype) . (("w") ("z") ("v") ("y") ("s") ("p") ("r") ("l") ("k") ("n") ("h") ("g") ("j")  ("c") ("f") ("x") ("t") ("q") ("m") ("d") ("b")))
+                             `(,(new-emetype) . (("i") ("u") ("o") ("e") ("y") ("a"))))) SubGrammar))
+
 
 ;arbitrarily creates productions from the typeset argument and 
 ;and assigns  them to a randomly generated list of new higher-order EmeTypes
@@ -189,7 +204,7 @@
                                                 (hash-set grammar (first types) (random-production-set composing-types)))]))])
     (compose-productions new-types (make-immutable-hash '()))))
 
-(define PRODUCTION-PROBABILITY .005)
+(define PRODUCTION-PROBABILITY .01)
 (define PRODUCTION-DECAY .03)
 
 ;constructs a set of Productions (though returned as a list type for convenience)
@@ -206,8 +221,8 @@
                                              decay-rate)]))])
     (set->list (make-productions (set ) PRODUCTION-PROBABILITY PRODUCTION-DECAY))))
 
-(define PRODUCTION-COMPLETION-PROBABILITY .005)
-(define PRODUCTION-COMPLETION-DECAY .02)
+(define PRODUCTION-COMPLETION-PROBABILITY .01)
+(define PRODUCTION-COMPLETION-DECAY .1)
 
 ;constructs a random Production from a set of types
 (: random-production ((Setof EmeType) -> Production))
@@ -315,6 +330,13 @@
   (error "NOT YET IMPLEMENTED"))
 
 
+(define G (build-grammar SELECTRIC-CHARS))
+
+
+;NOT USED--
+; the following is illustrates initial thinking about turning a production into text, but
+; works only assuming a pre-existing lexicon
+; see expand for the current working method
 ;turns a production into text. That is, given a grammatical outline of a unit of language
 ;it non-deterministically generates a text that conforms to the rules presented.
 (: evaluate (Production Grammar Lexicon -> String))
