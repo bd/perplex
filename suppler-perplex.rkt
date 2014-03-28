@@ -2,9 +2,8 @@
 (require math/base)
 (require racket/set)
 
-(require/typed typed/racket
-         [string-normalize-spaces (String -> String)])
-;the smallest unit of language, here, represented as a 1 character string
+
+;;the smallest unit of language, here, represented as a 1 character string
 (define-type Atom String)
 (define-predicate Atom? Atom)
 ;after phoneme, lexeme, morpheme, etc.
@@ -27,23 +26,16 @@
 ; i.e. all the words (phrases, phonemes, etc.) in the language
 (define-type Lexicon (HashTable EmeType (Listof String)))  
 
-(: top-lhs-of (Grammar -> (Listof EmeType)))
-(define (top-lhs-of grammar)
-  (hash-keys (first grammar)))
-
-(: random-top-lhs-of (Grammar -> EmeType))
-(define (random-top-lhs-of grammar)
-  (select-random (top-lhs-of grammar)))
 
 (: empty-lexicon ( -> Lexicon))
 (define (empty-lexicon)
   (make-immutable-hash `()))
 
+(define-type Expansion (Pairof String Lexicon))
 ;rather than evaluate directly, we need to preserve the particulars of an evaluation 
 ;so they can be interred in the lexicon for future use
-;the flow would be something like build-grammar -> generate production->expand-production->inter-production-evaluations->return text
+;the Expansion type provides this 
 
-(define-type Expansion (Pairof String Lexicon))
 (define PROB-NEW-TOKEN .10) ; because _that's_ the probability of a new token
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
@@ -53,6 +45,21 @@
 ; this is a non-deterministic function
 (define (expand type grammar lexicon)
   ((odds-on new-token old-token PROB-NEW-TOKEN) type grammar lexicon))
+
+(: make-expansion (String Lexicon -> Expansion))
+; constructor convenience function for Expansion
+(define (make-expansion token lex)
+  `(,token . ,lex))
+
+(: token-of (Expansion -> String))
+; accessor function for Expansion
+(define (token-of e)
+  (car e))
+
+(: lexicon-of (Expansion -> Lexicon))
+; accessor function for Expansion
+(define (lexicon-of e)
+  (cdr e))
 
 (: new-token Expander)
 ; generates a new token-- a new part of the language is used for the first time
@@ -85,12 +92,7 @@
             [normalized-token  : String (string-normalize-spaces token)]
          [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
     (make-expansion token lexicon)))
-         
 
-
-(: make-expansion (String Lexicon -> Expansion))
-(define (make-expansion token lex)
-  `(,token . ,lex))
       
 (: old-token Expander)
 ; a pre-existing token is employed. 
@@ -109,8 +111,9 @@
     (and (not (empty? productions)) (Atom? (first (first productions))))))
 
 
-; utility to combine two lexica into a single master lexicon
+
 (: merge-lexica (Lexicon Lexicon -> Lexicon))
+; utility to combine two lexica into a single master lexicon
 (define (merge-lexica a b)
   (letrec: ([merge-list : ((Listof String) (Listof String) -> (Listof String))
                         (λ: ([lst-a : (Listof String)]
@@ -132,14 +135,6 @@
 ;; - : Lexicon
 ;; '#hash((EmeType60344 . ("beta" "alpha" "delta" "gamma")))
 
-(: token-of (Expansion -> String))
-(define (token-of e)
-  (car e))
-
-(: lexicon-of (Expansion -> Lexicon))
-(define (lexicon-of e)
-  (cdr e))
-
 (define GRAMMAR-INITIAL-PROBABILITY .005)
 (define GRAMMAR-DECAY-RATE .055)
 
@@ -158,24 +153,32 @@
     (build (list base-grammar) GRAMMAR-INITIAL-PROBABILITY GRAMMAR-DECAY-RATE)))
 
 (: root-grammar (-> SubGrammar))
-;introducing more structure for aesthetic purposes
-; essentially, replacing bootstrap, above, is int- 
-; ended to make more "readable" gibberish. the 
+;introducing more structure for aesthetic purposes 
+; intended to make more "readable" gibberish. the 
 ; consonant/vowel divide simply makes the patterns
 ; a little more accessible on first glance.
 ;   | create a type for vowels, 
 ;   | a type for consonants, 
-;   | and a type for special/double chars
+;   | and assign frequency distributions for that good human language feel
 (define (root-grammar)
-  (cast (make-immutable-hash (list `(,(new-emetype) . ,(frequency-distribute (list  '("w") '("z") '("v") '("y") '("s") '("p") '("r") '("l") '("k") '("n") '("h") '("g") '("j")  '("c") '("f") '("x") '("t") '("q") '("m") '("d") '("b"))
+  (cast (make-immutable-hash (list `(,(new-emetype) . ,(frequency-distribute (list  '("w") '("z") '("v")  '("s") '("p") '("r") '("l") '("k") '("n") '("h") '("g") '("j")  '("c") '("f") '("x") '("t") '("q") '("m") '("d") '("b"))
                                                                             CONSONANT-FREQUENCIES))
                              `(,(new-emetype) . ,(frequency-distribute (list '("i") '("u") '("o") '("e") '("y") '("a"))
                                                                       VOWEL-FREQUENCIES)))) SubGrammar))
 
-(define CONSONANT-FREQUENCIES '(9 7 6 6 6 4 4 3 2 2 2 2 2 2 1 1 1 1 1 1 1))
+(: perturb-distribution ((Listof Integer) Integer Integer -> (Listof Integer)))
+; add variability within a range to a frequency distribution
+; randomly adds or subtracts an integer between 'lower and 'upper
+; to each frequency in 'distribution
+(define (perturb-distribution distribution lower upper)
+  (pass))
+
+;both roughly based on old ETAOIN SHRDLCU
+(define CONSONANT-FREQUENCIES '(9 7 6 6 6 4 4 3 2 2 2 2 2 2 1 1 1 1 1 1 ))
 (define VOWEL-FREQUENCIES '(13 8 8 7 3 2))
 
 (: repeat (All (T) (T Integer -> (Listof T))))
+; create a list with 'item occuring 'times 
 (define (repeat item times)
   (cond [(< times 1) '()]
         [else (cons item (repeat item (- times 1)))]))
@@ -207,7 +210,7 @@
     (compose-productions new-types (make-immutable-hash '()))))
 
 (define PRODUCTION-PROBABILITY .01)
-(define PRODUCTION-DECAY .03)
+(define PRODUCTION-DECAY .15)
 
 
 (: random-production-set ((Listof EmeType) -> (Listof Production)))
@@ -327,6 +330,8 @@
         (pick (reverse (sort odds (λ: ([one : Odds] [other : Odds]) (> (cdr one) (cdr other))))))
         (error "Odds in argument to odds-that must total 1.0"))))
 
+; because I like that feature of python
+; TODO: implement #pass syntax
 (define (pass)
   (error "NOT YET IMPLEMENTED"))
 
@@ -394,6 +399,16 @@
 ; TODO: consider a probabalistic function to alternately add NONE layers...
 (define (lengthen-punctuation punctuation)
   `(,@punctuation ,(make-punctuation-layer DOUBLE-NEWLINE)))
+
+(: top-lhs-of (Grammar -> (Listof EmeType)))
+; convenience function for composing
+(define (top-lhs-of grammar)
+  (hash-keys (first grammar)))
+
+(: random-top-lhs-of (Grammar -> EmeType))
+; convenience function for composing 
+(define (random-top-lhs-of grammar)
+  (select-random (top-lhs-of grammar)))
 
 (define ALL-PUNCTUATION-LAYERS (map (λ: ([x : (Listof String)]) (make-punctuation-layer x)) ALL-PUNCTUATION))
 (define G (punctuate ALL-PUNCTUATION-LAYERS (reverse (build-grammar))))
