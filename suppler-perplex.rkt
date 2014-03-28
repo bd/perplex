@@ -2,6 +2,8 @@
 (require math/base)
 (require racket/set)
 
+(require/typed typed/racket
+         [string-normalize-spaces (String -> String)])
 ;the smallest unit of language, here, represented as a 1 character string
 (define-type Atom String)
 (define-predicate Atom? Atom)
@@ -79,10 +81,13 @@
 (: collapse ((Listof Expansion) -> Expansion))
 ; flatten a list of expansions into a single expansion representing the whole thing--
 (define (collapse expansions)
-  (letrec: ([token : String (foldl (λ: ([e : Expansion] [working : String]) (string-append working (token-of e))) "" expansions)]
+  (letrec: ([token : String   (foldl (λ: ([e : Expansion] [working : String]) (string-append working (token-of e))) "" expansions)]
+            [normalized-token  : String (string-normalize-spaces token)]
          [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
     (make-expansion token lexicon)))
          
+
+
 (: make-expansion (String Lexicon -> Expansion))
 (define (make-expansion token lex)
   `(,token . ,lex))
@@ -96,10 +101,6 @@
 (: inLexicon? (EmeType Lexicon -> Boolean))
 (define (inLexicon? type lexicon)
   (hash-has-key? lexicon type))
-
-;(define g (build-grammar SELECTRIC-CHARS))
-;(define t (random-top-lhs-of g))
-;(expand t g (empty-lexicon))
 
 (: isAtomType? (EmeType Grammar -> Boolean))
 ; true if the emetype is indivisible within a given grammar.
@@ -139,13 +140,12 @@
 (define (lexicon-of e)
   (cdr e))
 
+(define GRAMMAR-INITIAL-PROBABILITY .005)
+(define GRAMMAR-DECAY-RATE .055)
 
-(define GRAMMAR-INITIAL-PROBABILITY .05)
-(define GRAMMAR-DECAY-RATE .02)
-
+(: build-grammar ( -> Grammar))
 ;constructs a grammar for the language 
-(: build-grammar ((Setof Atom) -> Grammar))
-(define (build-grammar atomset)
+(define (build-grammar)
   (letrec: ([base-grammar : SubGrammar (root-grammar) ]
             [build : (Grammar Real Real -> Grammar)
                    (λ: ([grammar : Grammar]
@@ -157,24 +157,7 @@
                                         decay-rate)]))])
     (build (list base-grammar) GRAMMAR-INITIAL-PROBABILITY GRAMMAR-DECAY-RATE)))
 
-(define MIN_CHAR_TYPES 2)
-(define MAX_CHAR_TYPES 3)
-
-;assigns the character set to arbitrary types, as the starting point for the grammar
-;this is the foundation of the tower to babble we're constructing
-;(: bootstrap ((Setof Atom) -> SubGrammar ))
-;(define (bootstrap atomset)
-;  (letrec: ([types : (Listof EmeType) (make-random-emetype-list MIN_CHAR_TYPES MAX_CHAR_TYPES)]
-;            [atoms : (Listof Atom) (set->list atomset)]
-;            [assign-atoms : ((Listof EmeType) (Listof Atom) SubGrammar -> SubGrammar)
-;                          (λ (types atoms base-grammar)
-;                            (cond [(null? atoms) base-grammar]
-;                                  ;TODO | allow a few atoms to appear as valid productions of more than one base type, i.e. "sometimes y"
-;                                  ;TODO | allow multiple atoms to compose one base type, i.e. "ll"
-;                                  [else (assign-atoms types (rest atoms) (update base-grammar (select-random types) (list (first atoms))))]))])
-;    (assign-atoms types  atoms (make-immutable-hash '()))))
-
-
+(: root-grammar (-> SubGrammar))
 ;introducing more structure for aesthetic purposes
 ; essentially, replacing bootstrap, above, is int- 
 ; ended to make more "readable" gibberish. the 
@@ -183,11 +166,30 @@
 ;   | create a type for vowels, 
 ;   | a type for consonants, 
 ;   | and a type for special/double chars
-(: root-grammar (-> SubGrammar))
 (define (root-grammar)
-  (cast (make-immutable-hash (list `(,(new-emetype) . (("w") ("z") ("v") ("y") ("s") ("p") ("r") ("l") ("k") ("n") ("h") ("g") ("j")  ("c") ("f") ("x") ("t") ("q") ("m") ("d") ("b")))
-                             `(,(new-emetype) . (("i") ("u") ("o") ("e") ("y") ("a"))))) SubGrammar))
+  (cast (make-immutable-hash (list `(,(new-emetype) . ,(frequency-distribute (list  '("w") '("z") '("v") '("y") '("s") '("p") '("r") '("l") '("k") '("n") '("h") '("g") '("j")  '("c") '("f") '("x") '("t") '("q") '("m") '("d") '("b"))
+                                                                            CONSONANT-FREQUENCIES))
+                             `(,(new-emetype) . ,(frequency-distribute (list '("i") '("u") '("o") '("e") '("y") '("a"))
+                                                                      VOWEL-FREQUENCIES)))) SubGrammar))
 
+(define CONSONANT-FREQUENCIES '(9 7 6 6 6 4 4 3 2 2 2 2 2 2 1 1 1 1 1 1 1))
+(define VOWEL-FREQUENCIES '(13 8 8 7 3 2))
+
+(: repeat (All (T) (T Integer -> (Listof T))))
+(define (repeat item times)
+  (cond [(< times 1) '()]
+        [else (cons item (repeat item (- times 1)))]))
+
+(: frequency-distribute ((Listof (Listof String)) (Listof Integer) -> (Listof (Listof String))))
+; returns a list of atomic productions (root grammar) with the 
+; characters arbitrarily assigned repeated to reflect the frequency 
+; distribution passed as the second argument
+(define (frequency-distribute subgrammar histogram)
+  (foldl (λ: ([c : (Listof String)] [f : Integer] [acc : (Listof (Listof String))])
+         `(,@(repeat c f) ,@acc))
+         '()
+       (shuffle subgrammar)
+       histogram))
 
 (: extend-grammar ((Listof EmeType) -> SubGrammar))
 ;arbitrarily creates productions from the typeset argument and 
@@ -223,10 +225,11 @@
     (set->list (make-productions (set ) PRODUCTION-PROBABILITY PRODUCTION-DECAY))))
 
 (define PRODUCTION-COMPLETION-PROBABILITY .01)
-(define PRODUCTION-COMPLETION-DECAY .1)
+(define PRODUCTION-COMPLETION-DECAY .175)
 
-;constructs a random Production from a set of types
+
 (: random-production ((Setof EmeType) -> Production))
+;constructs a random Production from a set of types
 (define (random-production composing-types)
   (letrec: ([types : (Listof EmeType) (set->list composing-types)]
             [grammar-rule : (Production Real Real -> Production)
@@ -240,45 +243,52 @@
                                          decay-rate)]))])
     (grammar-rule '() PRODUCTION-COMPLETION-PROBABILITY PRODUCTION-COMPLETION-DECAY))) 
 
+
+(: done? (All (T) (Listof T) Real -> Boolean))
 ;randomly decides if a list (i.e. Production, list of Production, etc. is to be considered complete, given a probability
 ;thus, the caller may generate a decay function s.t. the likelihood of the production's 
 ;being extended is diminished with each successive call
 ;this function is meant to put off the determination of the range of variability until the last moment
-(: done? (All (T) (Listof T) Real -> Boolean))
 (define (done? production probability)
   (cond [(null? production) #f]
         [else  (< (random) probability)]))
 
 ;the character set [here: provided by the IBM Selectric II typewriter]
-(define SELECTRIC-CHARS (set "q" "w" "e" "r" "t" "y" "u" "i" "o" "p" "a" "s" "d" "f" "g" "h" "j" "k" "l" "z" "x" "c" "v" "b" "n" "m" ))
+;(define SELECTRIC-CHARS (set "q" "w" "e" "r" "t" "y" "u" "i" "o" "p" "a" "s" "d" "f" "g" "h" "j" "k" "l" "z" "x" "c" "v" "b" "n" "m" ))
 
-;utility to find the productions for the given EmeType
+
 (: lookup-productions (Grammar EmeType ->  (Listof Production)))
+; utility to find the productions for the given EmeType
 (define (lookup-productions grammar type)
   (cond [(Atom? type) (error "Cannot use Atom as Key to SubGrammar")] 
         [(null? grammar) (error (string-append "no such type exists in grammar: " (symbol->string type)))]
         [(hash-has-key? (first grammar) type) (hash-ref (first grammar) type)]
         [else (lookup-productions (rest grammar) type)]))
 
-;utility function to simplify adding values to a data structure that will be  used frequently throughout
+
 (: update  (All (A B) (HashTable A (Listof B)) A B -> (HashTable A (Listof B))))
+; utility function to simplify adding values to a data structure that will be  used frequently throughout
 (define (update table key value)
   (cond [(hash-has-key? table key) (hash-set table key (cons value (hash-ref table key)))]
         [else (hash-set table key (list value))]))
 
 
-;utility function to select a random element of a list
+
 (: select-random (All (T) ((Listof T) -> T)))
+; utility function to select a random element of a list
 (define (select-random lst) 
   (list-ref lst (random-integer 0 (length lst))))
 
-;utility
+
 (: lookup-in-lexicon (Lexicon EmeType -> (Listof String)))
+; utility
 (define (lookup-in-lexicon lexicon type)
   (hash-ref lexicon type))
 
-;generates an arbitrary, unique symbol to use as the type name
+
 (: new-emetype (-> EmeType))
+; generates an arbitrary, unique symbol to use as the type name
+; no one besides a maintainer of the program should encouter these names
 (define (new-emetype)
   (gensym 'EmeType))
 
@@ -293,20 +303,10 @@
                              [else (bld-lst (- remaining 1) (cons (new-emetype) lst))]))])
     (bld-lst how-many '())))
 
-;randomly decides whether the eme to write will be one that has been used before or not
-(: lookup-in-lexicon? (Lexicon EmeType -> Boolean))
-(define (lookup-in-lexicon? lexicon type)
-  (and (not (generate-new-eme?)) (hash-has-key? lexicon type)))
-
-(: generate-new-eme? ( -> Boolean))
-(define (generate-new-eme?)
-  (> (random) .333))
-
-; TODO: use odds-on to refactor perplex 
-;Refactor with a "might" HOF, takes a two functions, and a probability, 
-;returns a function which calls the first function with probability, 
-;calls the second function with 1 - probability
 (: odds-on (All (X Y) (X Y Real -> (U X Y))))
+; - given two procedures and a probability, probabalistically return one procedure
+; | choice is returned odds*100 percent of the time
+; | alternative is returned (1 - odds)*100 percent of the time
 (define (odds-on choice alternative odds)
   (cond [(< (random) odds) choice]
         [else alternative]))
@@ -331,12 +331,10 @@
   (error "NOT YET IMPLEMENTED"))
 
 
-
-
 (define NONE '(""))
 (define SPACE '(" "))
-(define INTRA-SENTENCE '(" " "," "-"))
-(define INTER-SENTENCE '("." "!" ";" ":" "..." "?"))
+(define INTRA-SENTENCE '(" " " " " " "," ", " "-"))
+(define INTER-SENTENCE '(". " ". " ". " ". " "! " "; " ": " "... " "? "))
 (: append-newline (String -> String))
 (define (append-newline x) (string-append x "\n"))
 (define WITH-NEWLINE (map append-newline INTER-SENTENCE))
@@ -398,27 +396,7 @@
   `(,@punctuation ,(make-punctuation-layer DOUBLE-NEWLINE)))
 
 (define ALL-PUNCTUATION-LAYERS (map (λ: ([x : (Listof String)]) (make-punctuation-layer x)) ALL-PUNCTUATION))
-(define G (reverse (punctuate ALL-PUNCTUATION-LAYERS (reverse (build-grammar SELECTRIC-CHARS)))))
-
-
-;NOT USED--
-; the following is illustrates initial thinking about turning a production into text, but
-; works only assuming a pre-existing lexicon
-; see expand for the current working method
-;turns a production into text. That is, given a grammatical outline of a unit of language
-;it non-deterministically generates a text that conforms to the rules presented.
-(: evaluate (Production Grammar Lexicon -> String))
-(define (evaluate production grammar lexicon)
-  (letrec: ([eval : (Production Grammar -> String)
-                  (λ: ([production : Production]
-                       [grammar : Grammar])                      
-                    (cond [(null? production) ""]
-                          [(Atom? (first production)) (first production)]
-                          [(lookup-in-lexicon? lexicon (first production)) (string-append 
-                                                                            (select-random (lookup-in-lexicon lexicon (first production))) 
-                                                                            (eval (rest production) grammar))]
-                          [else (string-append (eval (select-random (lookup-productions grammar (first production)))
-                                                     grammar )
-                                               (eval (rest production) grammar))]))])
-    (eval production grammar)))
+(define G (punctuate ALL-PUNCTUATION-LAYERS (reverse (build-grammar))))
+(define e (expand (random-top-lhs-of G) G (empty-lexicon)))
+(displayln  (token-of e))
 
