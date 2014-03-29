@@ -12,20 +12,23 @@
 (define-type EmeType (U Symbol Atom))
 (define-predicate EmeType? EmeType)
 (define-predicate ComplexType? Symbol)
+
 ;a grammatically valid sequence of EmeTypes, i.e. "subject verb object"
 (define-type Production (Listof EmeType))
+
 ;The whole kitten kaboodle, grammatically speaking--our generated language's grammar
 ;constructed as a list of mappings from a type to valid productions 
 ;the order of the list provides implicit hierarchy, s.t. (first Grammar)
 ;is composed entirely from the types defined in (rest Grammar)
 (define-type Grammar (Listof SubGrammar))
+
 ;a single level of a grammar
 (define-type SubGrammar (HashTable EmeType  (Listof Production)))
+
 ;the container for the specific tokens of given EmeTypes
 ; organized by EmeType
 ; i.e. all the words (phrases, phonemes, etc.) in the language
 (define-type Lexicon (HashTable EmeType (Listof String)))  
-
 
 (: empty-lexicon ( -> Lexicon))
 (define (empty-lexicon)
@@ -89,11 +92,28 @@
 ; flatten a list of expansions into a single expansion representing the whole thing--
 (define (collapse expansions)
   (letrec: ([token : String   (foldl (λ: ([e : Expansion] [working : String]) (string-append working (token-of e))) "" expansions)]
-            [normalized-token  : String (string-normalize-spaces token)]
+            [normalized-token  : String (clean-punctuation token)]
          [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
-    (make-expansion token lexicon)))
+    (make-expansion normalized-token lexicon)))
 
-      
+(: clean-punctuation (String -> String))
+; formats the punctuation characters in a more sensible manner
+(define (clean-punctuation str)
+  (string-normalize-spaces #:trim? #f (normalize-marks  str) #px" +" " "))
+
+
+(: normalize-marks (String -> String))
+; clean up punctuation: only the final punctuation mark in a run,
+; except for elipses, which we first rewrite as % then back 
+(define (normalize-marks str)
+  (cast (regexp-replaces str '([#px"\\.{3}" "%"]                    ; ... -> %
+                               [#px"\\W+([.:,.!?;])(.)"  "\\1 \\2"] ; run of marks -> final mark
+                               [#px"\\W?%" "..."]                       ; % -> ...
+                               [#px"(\\w)\\1+" "\\1"]               ; no runs of letters longer than 3
+                               [#px"([:;])\\s+" "\\1 "]             ; no colon or semi-colon before newline
+                               [#px" -" "-"]))                      ; no space before hyphen
+        String))
+
 (: old-token Expander)
 ; a pre-existing token is employed. 
 (define (old-token type grammar lexicon)
@@ -109,7 +129,6 @@
 (define (isAtomType? type grammar)
   (let: ([productions : (Listof Production) (lookup-productions grammar type)])
     (and (not (empty? productions)) (Atom? (first (first productions))))))
-
 
 
 (: merge-lexica (Lexicon Lexicon -> Lexicon))
@@ -227,8 +246,8 @@
                                              decay-rate)]))])
     (set->list (make-productions (set ) PRODUCTION-PROBABILITY PRODUCTION-DECAY))))
 
-(define PRODUCTION-COMPLETION-PROBABILITY .01)
-(define PRODUCTION-COMPLETION-DECAY .175)
+(define PRODUCTION-COMPLETION-PROBABILITY .3)
+(define PRODUCTION-COMPLETION-DECAY .2)
 
 
 (: random-production ((Setof EmeType) -> Production))
@@ -338,13 +357,13 @@
 
 (define NONE '(""))
 (define SPACE '(" "))
-(define INTRA-SENTENCE '(" " " " " " "," ", " "-"))
+(define INTRA-SENTENCE '(" " " " " " ", " ", " "-"))
 (define INTER-SENTENCE '(". " ". " ". " ". " "! " "; " ": " "... " "? "))
 (: append-newline (String -> String))
 (define (append-newline x) (string-append x "\n"))
 (define WITH-NEWLINE (map append-newline INTER-SENTENCE))
 (define DOUBLE-NEWLINE (map append-newline WITH-NEWLINE))
-(define ALL-PUNCTUATION `(,NONE ,NONE ,SPACE ,INTRA-SENTENCE ,INTER-SENTENCE ,WITH-NEWLINE ,DOUBLE-NEWLINE))
+(define ALL-PUNCTUATION `(,NONE ,NONE ,NONE ,SPACE ,INTRA-SENTENCE ,INTER-SENTENCE ,WITH-NEWLINE ,DOUBLE-NEWLINE))
 
 (define-type PunctuationLayer (Pairof EmeType (Listof (Listof String))))
 
@@ -413,5 +432,8 @@
 (define ALL-PUNCTUATION-LAYERS (map (λ: ([x : (Listof String)]) (make-punctuation-layer x)) ALL-PUNCTUATION))
 (define G (punctuate ALL-PUNCTUATION-LAYERS (reverse (build-grammar))))
 (define e (expand (random-top-lhs-of G) G (empty-lexicon)))
-(displayln  (token-of e))
+(displayln  (string-trim (token-of e)))
 
+(: compose (Grammar Lexicon -> Expansion))
+(define (compose grammar lexicon)
+  (expand (random-top-lhs-of grammar) grammar lexicon))
