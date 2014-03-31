@@ -39,6 +39,11 @@
 ;so they can be interred in the lexicon for future use
 ;the Expansion type provides this 
 
+; TODO: refactor/shadow as a stateful function
+; which reduces its probability over time
+; ultimately, may need a more involved strategy--
+; want to constrain lower-level type->tokens to 
+; top out early, but keep making new higher-level tokens
 (define PROB-NEW-TOKEN .10) ; because _that's_ the probability of a new token
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
@@ -63,6 +68,12 @@
 ; accessor function for Expansion
 (define (lexicon-of e)
   (cdr e))
+
+; TODO: next iteration of perplex might be nicer 
+; with more struct types--localizing information 
+; about where in the grammatical hierarchy we are
+; may simplify making some of the probabalistic
+; decisions 
 
 (: new-token Expander)
 ; generates a new token-- a new part of the language is used for the first time
