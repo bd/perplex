@@ -3,6 +3,7 @@
 (require racket/set)
 
 
+
 ;;the smallest unit of language, here, represented as a 1 character string
 (define-type Atom String)
 (define-predicate Atom? Atom)
@@ -44,7 +45,7 @@
 ; ultimately, may need a more involved strategy--
 ; want to constrain lower-level type->tokens to 
 ; top out early, but keep making new higher-level tokens
-(define PROB-NEW-TOKEN .10) ; because _that's_ the probability of a new token
+(define PROB-NEW-TOKEN .60) ; because _that's_ the probability of a new token
 
 (define-type Expander (EmeType Grammar Lexicon -> Expansion))
 
@@ -104,7 +105,7 @@
 (define (collapse expansions)
   (letrec: ([token : String   (foldl (λ: ([e : Expansion] [working : String]) (string-append working (token-of e))) "" expansions)]
             [normalized-token  : String (clean-punctuation token)]
-         [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
+            [lexicon : Lexicon (foldl (λ: ([e : Expansion] [working : Lexicon]) (merge-lexica working (lexicon-of e))) (empty-lexicon) expansions)])
     (make-expansion normalized-token lexicon)))
 
 (: clean-punctuation (String -> String))
@@ -190,11 +191,13 @@
 ;   | create a type for vowels, 
 ;   | a type for consonants, 
 ;   | and assign frequency distributions for that good human language feel
+; the conceptual artist in me says this is adding too much preconceived notions of "language"
+; the aesthete says fuckit, looks better. the aesthete is correct.
 (define (root-grammar)
   (cast (make-immutable-hash (list `(,(new-emetype) . ,(frequency-distribute (list  '("w") '("z") '("v")  '("s") '("p") '("r") '("l") '("k") '("n") '("h") '("g") '("j")  '("c") '("f") '("x") '("t") '("q") '("m") '("d") '("b"))
-                                                                            CONSONANT-FREQUENCIES))
-                             `(,(new-emetype) . ,(frequency-distribute (list '("i") '("u") '("o") '("e") '("y") '("a"))
-                                                                      VOWEL-FREQUENCIES)))) SubGrammar))
+                                                                             CONSONANT-FREQUENCIES))
+                                   `(,(new-emetype) . ,(frequency-distribute (list '("i") '("u") '("o") '("e") '("y") '("a"))
+                                                                             VOWEL-FREQUENCIES)))) SubGrammar))
 
 (: perturb-distribution ((Listof Integer) Integer Integer -> (Listof Integer)))
 ; add variability within a range to a frequency distribution
@@ -219,10 +222,10 @@
 ; distribution passed as the second argument
 (define (frequency-distribute subgrammar histogram)
   (foldl (λ: ([c : (Listof String)] [f : Integer] [acc : (Listof (Listof String))])
-         `(,@(repeat c f) ,@acc))
+           `(,@(repeat c f) ,@acc))
          '()
-       (shuffle subgrammar)
-       histogram))
+         (shuffle subgrammar)
+         histogram))
 
 (: extend-grammar ((Listof EmeType) -> SubGrammar))
 ;arbitrarily creates productions from the typeset argument and 
@@ -239,8 +242,8 @@
                                                 (hash-set grammar (first types) (random-production-set composing-types)))]))])
     (compose-productions new-types (make-immutable-hash '()))))
 
-(define PRODUCTION-PROBABILITY .01)
-(define PRODUCTION-DECAY .15)
+(define PRODUCTION-PROBABILITY .1)
+(define PRODUCTION-DECAY .02)
 
 
 (: random-production-set ((Listof EmeType) -> (Listof Production)))
@@ -259,6 +262,17 @@
 
 (define PRODUCTION-COMPLETION-PROBABILITY .3)
 (define PRODUCTION-COMPLETION-DECAY .2)
+
+
+;
+;(: random-production-2 ((Listof EmeType) Integer Integer -> Production ))
+;; produces a random production of length between upper and lower
+;(define (random-production-2 composing-types lower upper)
+;  (letrec: ([histogram : (Listof Emetype) (frequency-distribute composing-types (generate-distribution (length composing-types)))]
+;            [options : (Listof (Listof Production)) (permutations histogram)]
+;            [grammar-rule: ((Listof (Listof Production)) -> Production)
+;                           (λ: ([options : (Listof (Listof Production))]) (pass))])
+;            (pass)))
 
 
 (: random-production ((Setof EmeType) -> Production))
@@ -401,7 +415,7 @@
 (: add-punctuation-types ((Listof PunctuationLayer) SubGrammar -> SubGrammar))
 (define (add-punctuation-types punctuation subgrammar)
   (make-immutable-hash `(,@punctuation ,@(hash->list subgrammar))))
-            
+
 
 (: punctuate-subgrammar (PunctuationLayer SubGrammar -> SubGrammar))
 ; appends the EmeType of marks to the end of each production in subgrammar
@@ -409,14 +423,14 @@
   (letrec: ([keys : (Listof EmeType) (hash-keys subgrammar)]
             [punctuation-type : EmeType (car marks)]
             [punctuate-lhs : ((Listof EmeType) SubGrammar EmeType -> SubGrammar)
-                            (λ (types sg punc-type)
-                              (cond [(empty? types) sg]
-                                    [else (punctuate-lhs (rest types) 
-                                                         (hash-set sg (first types) (map (λ: ([prod : Production]) (cond [(not (string? (first prod)))`(,@prod ,punc-type)]
-                                                                                                                                      [else prod]))
-                                                                                                     (hash-ref sg (first types))))
-                                                         punc-type)]))])
-            (punctuate-lhs keys subgrammar punctuation-type)))
+                           (λ (types sg punc-type)
+                             (cond [(empty? types) sg]
+                                   [else (punctuate-lhs (rest types) 
+                                                        (hash-set sg (first types) (map (λ: ([prod : Production]) (cond [(not (string? (first prod)))`(,@prod ,punc-type)]
+                                                                                                                        [else prod]))
+                                                                                        (hash-ref sg (first types))))
+                                                        punc-type)]))])
+    (punctuate-lhs keys subgrammar punctuation-type)))
 
 (: lengthen-grammar (Grammar -> Grammar))
 ; extends a grammar by adding a layer of grammar above the top
@@ -448,3 +462,24 @@
 (: compose (Grammar Lexicon -> Expansion))
 (define (compose grammar lexicon)
   (expand (random-top-lhs-of grammar) grammar lexicon))
+
+(: write-some (Language -> Expansion))
+(define (write-some language)
+  (compose (mcar language) (mcdr language)))
+
+(define-type Language (MPairof Grammar Lexicon))
+
+(: make-language (Grammar Lexicon -> Language))
+(define (make-language grammar lexicon)
+  (mcons grammar lexicon))
+
+(define L (make-language G (lexicon-of e)))
+
+(: more ( -> Void))
+(define (more) 
+  (begin (define e-prime (write-some L)) 
+         (set-mcdr! L (lexicon-of e-prime))
+         (displayln (token-of e-prime))))
+
+
+
