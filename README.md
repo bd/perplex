@@ -5,6 +5,6 @@ The Perplex is an experiment in quasi-linguistic formalism, in gibberish. Borrow
 
 Like most of my work, this is a serious joke. A lonely robot, desperately seeking to communicate in an unending series of idiolects, or a play on the abstract aesthetics of non-representational painting for a conceptual artist. And, like most of my work, it is a point on a line, or a member of a set--these examples are not the first, nor will they be the last iterations of the attempt to make excellent gibberish. 
 
-The [Letters](https://drive.google.com/#folders/0B6j8YZcIj7zNQ3hEYk9Md3o4bW8).
+The [Letters](https://drive.google.com/folderview?id=0B6j8YZcIj7zNQ3hEYk9Md3o4bW8&usp=sharing).
 
 I'd like to thank Helen Thorington and Jo-Anne Green of  [Turbulence.org](http://turbulence.org), and the [NEA](arts.gov) for helping to make this project possible, not to mention the inspiration and guidance provided by Andrew McNay, and Andrew Wilson, among many others.
